@@ -8,8 +8,6 @@ import { FL_MIAMI_DADE_2026 as TAX } from "../taxpacks/fl-miami-dade.ts";
 
 // Local taxes come only from the tax pack. If an item there is unknown, this line stops instead of guessing.
 const t = (key: Parameters<typeof taxValue>[1]) => taxValue(TAX, key, 2026);
-export const SHOP_SEATS = 20; // estimated for a 1,000 sq ft shop; no source. Also sits in the county's 1-30 seat tier.
-const CITY_BUSINESS_TAX = t("cityBusinessTaxBaseCents") + Math.max(0, SHOP_SEATS - t("cityBusinessTaxSeatThreshold")) * t("cityBusinessTaxPerExtraSeatCents");
 const SALES_TAX_PCT = t("preparedFoodAndDrinkTaxable") === 1 ? t("salesTaxStatePct") + t("salesTaxLocalPct") : 0;
 
 export const MIAMI_COFFEE_PROVENANCE: Record<string, Provenance> = {
@@ -51,9 +49,14 @@ export const MIAMI_COFFEE_PROVENANCE: Record<string, Provenance> = {
   employmentTax: { value: "self-employment tax 15.3% on 92.35% of profit; Social Security part stops at $184,500 of earnings", kind: "sourced", asOf: "tax year 2026",
     source: "2026 Social Security wage base of $184,500 and unchanged FICA rates, per payroll guides read today; the 92.35% factor is from general knowledge",
     note: "Income tax, the half-of-SE-tax deduction and the qualified business income deduction are not modeled." },
-  localTaxes: { value: "7% sales tax on tickets, $313 certificate of use then $63 a year reinspection, $45 a year county business tax, $47 a year city business tax", kind: "sourced", asOf: "tax year 2026",
+  layout: { value: "15 sq ft per table seat, 9 per counter seat, back of house at least 15% of the unit", kind: "sourced", asOf: "2026",
+    source: "Table seats 12-15 sq ft and counter seats 8-10 sq ft: Bellwether https://bellwethercoffee.com/blog/small-cafe-layout-design-guide ; 15 net sq ft per person for tables and chairs is also the building code's occupant load factor (Florida Building Code ch. 10 table, floridabuilding.org); back of house 15-25% for a light menu: plan7architect.com cafe size guide",
+    note: "Check on the default: 28 seats in 1,000 sq ft sits inside Bellwether's 25-40 for 900-1,200 sq ft; Intermix says 15-20 for a 1,000 sq ft coffee bar. The code factor used is from a 2007 Florida supplement; the current edition was not opened." },
+  layoutBehaviour: { value: "50 sq ft per bar station, 50 sq ft minimum restroom, 100 sq ft minimum bar, 40% of customers want a seat, each seat serves 2.5 customers per 4-hour daypart, half of those who find no seat leave, 45% of a daypart's customers arrive in its busiest hour",
+    kind: "estimated", asOf: "2026-11-12", source: "none", note: "These decide how much seating matters. All seven are guesses." },
+  localTaxes: { value: "7% sales tax on tickets, $313 certificate of use then $63 a year reinspection, county and city business taxes that follow the seat count ($45 and $63 on the default 28 seats)", kind: "sourced", asOf: "tax year 2026",
     source: "src/taxpacks/fl-miami-dade.ts, which carries a link for each figure",
-    note: "The City of Miami's own business tax is $47 a year for an assumed 20 seats ($27 up to ten seats plus $2 a seat above that, City Code sec. 31-50). Bags of beans would be exempt from sales tax; the shop does not sell them yet." },
+    note: "City business tax is $27 up to ten seats plus $2 a seat above that (City Code sec. 31-50). County tiers are $45, $90, $135 and $180 at 30, 74, 149 and 150-plus seats. Bags of beans would be exempt from sales tax; the shop does not sell them yet." },
   waste: { value: "2% of tickets", kind: "estimated", asOf: "2026-11-12", source: "none" },
   ownerPersonal: { value: "job take-home $3,800 a month, living costs $4,000 a month", kind: "estimated", asOf: "2026-11-12", source: "none", note: "Placeholders until the personal-finance layer is sourced." },
   everythingElse: { value: "price elasticity 1.2, opening awareness 35%, 120-day ramp, weekday pattern, daypart split 50/30/20, 30 tickets per person-hour, 5-day shelf life, 2.9% card fee, 60-day buildout, 2-month deposit, loan at 10.5% over 7 years",
@@ -81,8 +84,16 @@ export const MIAMI_COFFEE: CoffeeConfig = {
   unitCostCents: 2_54, shelfLifeDays: 5, parDays: 2,
   monthlyUtilitiesCents: 900_00, monthlyInsuranceCents: 300_00, monthlyMarketingCents: 600_00, monthlyOtherCents: 900_00,
   cardFeePct: 2.9, repairsPctOfSales: 2, wastePct: 2,
-  salesTaxPct: SALES_TAX_PCT, certificateOfUseCents: t("certificateOfUseInitialCents"), countyBusinessTaxCentsPerYear: t("countyBusinessTaxCentsPerYear"),
-  certificateOfUseAnnualCents: t("certificateOfUseAnnualCents"), cityBusinessTaxCentsPerYear: CITY_BUSINESS_TAX,
+  salesTaxPct: SALES_TAX_PCT, certificateOfUseCents: t("certificateOfUseInitialCents"), certificateOfUseAnnualCents: t("certificateOfUseAnnualCents"),
+  businessTax: {
+    cityBaseCents: t("cityBusinessTaxBaseCents"), citySeatThreshold: t("cityBusinessTaxSeatThreshold"), cityPerExtraSeatCents: t("cityBusinessTaxPerExtraSeatCents"),
+    // County eating-establishment tiers inside a city, from the Tax Collector's schedule; the first tier is the tax pack's value.
+    countyTiers: [[30, t("countyBusinessTaxCentsPerYear")], [74, 90_00], [149, 135_00], [Infinity, 180_00]],
+  },
+  // Default floor plan for 1,000 sq ft: 400 sq ft of seating holding 20 table seats and 8 counter seats.
+  layout: { serviceBarSqFt: 200, backOfHouseSqFt: 250, restroomSqFt: 60, queueSqFt: 90, tableSeats: 20, counterSeats: 8 },
+  layoutRules: { sqFtPerTableSeat: 15, sqFtPerCounterSeat: 9, sqFtPerBarStation: 50, minBackOfHouseShare: 0.15, minRestroomSqFt: 50, minServiceBarSqFt: 100 },
+  sitInShare: 0.4, seatTurnsPerDaypart: 2.5, leaveIfNoSeatShare: 0.5, peakHourShare: 0.45,
   management: "owner", managerSalaryCentsPerYear: 70_000_00, minCashAfterDrawCents: 15_000_00,
   jobNetMonthlyCents: 3_800_00, personalMonthlyExpensesCents: 4_000_00,
   entity: "pass_through", sCorpAdminMonthlyCents: 208_00,

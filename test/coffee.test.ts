@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runCoffee } from "../src/coffee.ts";
+import { runCoffee, checkCoffeeLayout, businessTaxForSeats } from "../src/coffee.ts";
 import { MIAMI_COFFEE, MIAMI_COFFEE_LOCATIONS, MIAMI_COFFEE_PROVENANCE } from "../src/markets/miami-coffee.ts";
 
 const funded = { ...MIAMI_COFFEE, personalCashCents: 600_000_00, contributionCents: 500_000_00 };
@@ -109,4 +109,36 @@ test("coffee: sales tax is collected on top of the ticket, never counted as reve
   assert.ok(Math.abs(remitted + b.balance("sales_tax_payable") - Math.round(rev(withTax) * 0.07)) < 2000); // rounding per day
   assert.ok(b.balance("sales_tax_payable") < rev(withTax) * 0.07 / 30); // at most about a month outstanding
   assert.ok(b.balanceSheet().balanced);
+});
+
+test("coffee layout: the floor plan has to fit, and the rules are enforced", () => {
+  const rules = MIAMI_COFFEE.layoutRules, base = MIAMI_COFFEE.layout;
+  const ok = checkCoffeeLayout(1000, base, rules);
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.seats, 28); assert.equal(ok.seatingSqFt, 400); assert.equal(ok.barStations, 4);
+  assert.ok(checkCoffeeLayout(1000, { ...base, tableSeats: 40 }, rules).errors.some(e => e.includes("seats need")));
+  assert.ok(checkCoffeeLayout(1000, { ...base, backOfHouseSqFt: 100 }, rules).errors.some(e => e.includes("back of house")));
+  assert.ok(checkCoffeeLayout(1000, { ...base, restroomSqFt: 0 }, rules).errors.some(e => e.includes("restroom")));
+  assert.ok(checkCoffeeLayout(1000, { ...base, serviceBarSqFt: 900 }, rules).errors.some(e => e.includes("only 1000 sq ft")));
+  assert.throws(() => runCoffee({ ...funded, layout: { ...base, tableSeats: 40 } }), /cannot be built/);
+  // A takeaway counter with no seats needs no restroom under these rules.
+  assert.equal(checkCoffeeLayout(1000, { ...base, restroomSqFt: 0, tableSeats: 0, counterSeats: 0 }, rules).ok, true);
+});
+
+test("coffee layout: business taxes follow the seat count", () => {
+  const t = MIAMI_COFFEE.businessTax;
+  assert.deepEqual(businessTaxForSeats(8, t), { cityCents: 27_00, countyCents: 45_00 });
+  assert.deepEqual(businessTaxForSeats(28, t), { cityCents: 63_00, countyCents: 45_00 });
+  assert.deepEqual(businessTaxForSeats(31, t), { cityCents: 69_00, countyCents: 90_00 });
+});
+
+test("coffee layout: too few seats or too small a bar costs customers in a busy location", () => {
+  const busy = { ...funded, location: MIAMI_COFFEE_LOCATIONS.prime };
+  const base = runCoffee(busy);
+  const fewSeats = runCoffee({ ...busy, layout: { ...busy.layout, tableSeats: 4, counterSeats: 0 } });
+  const tinyBar = runCoffee({ ...busy, layout: { ...busy.layout, serviceBarSqFt: 100, queueSqFt: 190 } });
+  const lost = (r: ReturnType<typeof runCoffee>) => r.months.reduce((s, m) => s + m.walkouts, 0);
+  const rev = (r: ReturnType<typeof runCoffee>) => r.months.reduce((s, m) => s + m.revenueCents, 0);
+  assert.ok(lost(fewSeats) > lost(base) && rev(fewSeats) < rev(base));
+  assert.ok(lost(tinyBar) > lost(base) && rev(tinyBar) < rev(base));
 });

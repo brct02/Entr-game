@@ -14,6 +14,48 @@ export interface CoffeeLocation {
   passThroughPerSqFtYearCents: number; // taxes, insurance and common-area charges billed on top of base rent
 }
 
+/** How the player divides the floor. Whatever is left after these four areas is the seating area. */
+export interface CoffeeLayout {
+  serviceBarSqFt: number;   // counter, espresso machine, till: sets how many people can work the bar at once
+  backOfHouseSqFt: number;  // storage, prep, dishwashing, office
+  restroomSqFt: number;
+  queueSqFt: number;        // standing room for the line and the door
+  tableSeats: number;
+  counterSeats: number;     // stools along a bar or window; they take less floor than table seats
+}
+
+export interface LayoutRules {
+  sqFtPerTableSeat: number; sqFtPerCounterSeat: number; sqFtPerBarStation: number;
+  minBackOfHouseShare: number; minRestroomSqFt: number; minServiceBarSqFt: number;
+}
+
+export interface LayoutCheck { ok: boolean; errors: string[]; seats: number; seatingSqFt: number; seatingUsedSqFt: number; barStations: number; }
+
+export function checkCoffeeLayout(sqFt: number, layout: CoffeeLayout, rules: LayoutRules): LayoutCheck {
+  const errors: string[] = [];
+  const fixed = layout.serviceBarSqFt + layout.backOfHouseSqFt + layout.restroomSqFt + layout.queueSqFt;
+  const seatingSqFt = sqFt - fixed;
+  const seats = layout.tableSeats + layout.counterSeats;
+  const used = layout.tableSeats * rules.sqFtPerTableSeat + layout.counterSeats * rules.sqFtPerCounterSeat;
+  for (const [k, v] of Object.entries(layout)) if (!Number.isInteger(v) || v < 0) errors.push(`${k} must be a whole number, zero or more`);
+  if (seatingSqFt < 0) errors.push(`the bar, back of house, restroom and queue take ${fixed} sq ft but the unit is only ${sqFt} sq ft`);
+  else if (used > seatingSqFt) errors.push(`${seats} seats need ${used} sq ft but only ${seatingSqFt} sq ft is left for seating`);
+  if (layout.backOfHouseSqFt < sqFt * rules.minBackOfHouseShare) errors.push(`back of house needs at least ${Math.ceil(sqFt * rules.minBackOfHouseShare)} sq ft`);
+  if (layout.serviceBarSqFt < rules.minServiceBarSqFt) errors.push(`the service bar needs at least ${rules.minServiceBarSqFt} sq ft`);
+  if (seats > 0 && layout.restroomSqFt < rules.minRestroomSqFt) errors.push(`a shop with seating needs a restroom of at least ${rules.minRestroomSqFt} sq ft`);
+  return { ok: errors.length === 0, errors, seats, seatingSqFt, seatingUsedSqFt: used, barStations: Math.floor(layout.serviceBarSqFt / rules.sqFtPerBarStation) };
+}
+
+/** Yearly local business taxes that depend on the number of seats. */
+export interface SeatBasedBusinessTax {
+  cityBaseCents: number; citySeatThreshold: number; cityPerExtraSeatCents: number;
+  countyTiers: [maxSeats: number, cents: number][]; // ascending; the last tier covers everything above
+}
+export function businessTaxForSeats(seats: number, t: SeatBasedBusinessTax): { cityCents: number; countyCents: number } {
+  const tier = t.countyTiers.find(([max]) => seats <= max) ?? t.countyTiers[t.countyTiers.length - 1];
+  return { cityCents: t.cityBaseCents + Math.max(0, seats - t.citySeatThreshold) * t.cityPerExtraSeatCents, countyCents: tier[1] };
+}
+
 export interface CoffeeConfig {
   seed: number;
   months: number;
@@ -41,6 +83,14 @@ export interface CoffeeConfig {
   licensesCents: number;
   leaseTermMonths: number;       // buildout is depreciated over the lease
   equipmentLifeMonths: number;
+
+  // Floor plan
+  layout: CoffeeLayout;
+  layoutRules: LayoutRules;
+  sitInShare: number;            // share of customers who want a seat
+  seatTurnsPerDaypart: number;   // how many customers one seat serves in a daypart
+  leaveIfNoSeatShare: number;    // of those who wanted a seat and found none, the share who walk out
+  peakHourShare: number;         // share of a daypart's customers who arrive in its busiest hour
 
   // Menu and demand
   ticketCents: number;           // the player's average ticket
@@ -86,9 +136,8 @@ export interface CoffeeConfig {
   cardFeePct: number;
   salesTaxPct: number;           // collected from customers on top of the ticket and passed on to the state monthly
   certificateOfUseCents: number; // paid once when the lease is signed
-  countyBusinessTaxCentsPerYear: number; // paid at opening and every 12 months after
   certificateOfUseAnnualCents: number;   // yearly reinspection, from the first anniversary of opening
-  cityBusinessTaxCentsPerYear: number;   // paid at opening and every 12 months after
+  businessTax: SeatBasedBusinessTax;     // city and county receipts, paid at opening and every 12 months after
   repairsPctOfSales: number;     // paid monthly on the previous month's sales
   wastePct: number;              // remakes, comps and spills, as a share of tickets served
 }
@@ -162,6 +211,9 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
     ownerDrawsCents: 0, skippedDraws: 0, ownerSalaryCents: 0, ownerEmploymentTaxCents: 0 };
   if (cfg.management === "hired" && (cfg.ownerOnBar.some(n => n > 0) || cfg.cartMonths > 0))
     throw new Error("an owner who keeps their job cannot also work the bar or the cart");
+  const floor = checkCoffeeLayout(cfg.location.sqFt, cfg.layout, cfg.layoutRules);
+  if (cfg.openShop && !floor.ok) throw new Error(`this floor plan cannot be built: ${floor.errors.join("; ")}`);
+  const seatTax = businessTaxForSeats(floor.seats, cfg.businessTax);
   const personal = (fn: () => void) => {
     try { fn(); } catch (e) { throw e instanceof LedgerError ? new LedgerError("the owner ran out of personal money") : e; }
   };
@@ -240,8 +292,8 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
         if (phase === "buildout" && day >= leaseSignedDay + cfg.buildoutDays) { phase = "open"; openDay = day; }
 
         if (phase === "open" && (day - openDay) % 365 === 0) {
-          pay(day, "licenses", "County business tax receipt", cfg.countyBusinessTaxCentsPerYear);
-          pay(day, "licenses", "City business tax receipt", cfg.cityBusinessTaxCentsPerYear);
+          pay(day, "licenses", "County business tax receipt", seatTax.countyCents);
+          pay(day, "licenses", "City business tax receipt", seatTax.cityCents);
           if (day > openDay) pay(day, "licenses", "Certificate of use reinspection", cfg.certificateOfUseAnnualCents);
         }
 
@@ -323,12 +375,23 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
 
           // Three dayparts: demand arrives, staff and stock limit what gets served.
           const demand = draw(expected);
-          let served = 0, paidHours = 0, allotted = 0;
+          let served = 0, paidHours = 0, allotted = 0, leftForNoSeat = 0;
           for (let p = 0; p < 3; p++) {
             const want = p === 2 ? demand - allotted : Math.min(demand - allotted, Math.round(demand * cfg.daypartShare[p]));
             allotted += want;
-            const capacity = cfg.staffPerDaypart[p] * cfg.drinksPerPersonHour * cfg.hoursPerDaypart;
-            const got = Math.min(want, capacity, onHand - served);
+            // Seats: people who wanted to sit and found the room full either take it away or leave.
+            const wantSeat = Math.round(want * cfg.sitInShare);
+            const unseated = Math.max(0, wantSeat - Math.floor(floor.seats * cfg.seatTurnsPerDaypart));
+            const noSeat = Math.round(unseated * cfg.leaveIfNoSeatShare);
+            const stay = want - noSeat;
+            leftForNoSeat += noSeat;
+            // Bar: extra staff beyond the number of stations get in each other's way and add nothing.
+            // The busiest hour is checked on its own, because a rush is what a small bar cannot handle.
+            const working = Math.min(cfg.staffPerDaypart[p], floor.barStations);
+            const perHour = working * cfg.drinksPerPersonHour;
+            const rush = Math.round(stay * cfg.peakHourShare);
+            const canMake = Math.min(rush, perHour) + Math.min(stay - rush, perHour * (cfg.hoursPerDaypart - 1));
+            const got = Math.min(canMake, onHand - served);
             served += got;
             paidHours += Math.max(0, cfg.staffPerDaypart[p] - cfg.ownerOnBar[p]) * cfg.hoursPerDaypart;
           }
@@ -358,7 +421,8 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
           }
 
           // Turning people away costs you later; a good run slowly earns it back.
-          reputation = Math.max(0.7, Math.min(1, reputation + 0.003 * (1 - reputation) - 0.25 * (demand ? lost / demand : 0)));
+          // People who left because there was nowhere to sit are lost sales but not a service failure.
+          reputation = Math.max(0.7, Math.min(1, reputation + 0.003 * (1 - reputation) - 0.25 * (demand ? (lost - leftForNoSeat) / demand : 0)));
           recentDemand = [...recentDemand.slice(-6), demand];
           customers += served; walkouts += lost; tradedDays++;
         }
