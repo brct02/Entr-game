@@ -19,13 +19,17 @@ export const TAX_ITEM_BOUNDS = {
   sCorpPaysStateIncomeTax: [0, 1],          // 1 = yes, 0 = no
   salesTaxStatePct: [0, 10],
   salesTaxLocalPct: [0, 8],
-  preparedFoodAndDrinkTaxable: [0, 1],
+  preparedFoodAndDrinkTaxable: [0, 1],      // drinks and food made and sold to be consumed straight away
+  packagedGroceriesTaxable: [0, 1],         // sealed food to take home, such as a bag of coffee beans
   commercialRentSalesTaxPct: [0, 10],
   unemploymentNewEmployerPct: [0, 15],
   unemploymentWageBaseCents: [7_000_00, 100_000_00],
   minimumWageCentsPerHour: [7_25, 30_00],
   lodgingTaxTotalPct: [0, 25],
-  localBusinessLicenseCentsPerYear: [0, 50_000_00],
+  countyBusinessTaxCentsPerYear: [0, 50_000_00],   // for a small eating establishment
+  cityBusinessTaxCentsPerYear: [0, 50_000_00],
+  certificateOfUseInitialCents: [0, 50_000_00],    // for a small commercial unit
+  certificateOfUseAnnualCents: [0, 50_000_00],
 } as const;
 export type TaxItemKey = keyof typeof TAX_ITEM_BOUNDS;
 

@@ -3,6 +3,12 @@
 
 import type { CoffeeConfig, CoffeeLocation } from "../coffee.ts";
 import type { Provenance } from "./miami.ts";
+import { taxValue } from "../taxpack.ts";
+import { FL_MIAMI_DADE_2026 as TAX } from "../taxpacks/fl-miami-dade.ts";
+
+// Local taxes come only from the tax pack. If an item there is unknown, this line stops instead of guessing.
+const t = (key: Parameters<typeof taxValue>[1]) => taxValue(TAX, key, 2026);
+const SALES_TAX_PCT = t("preparedFoodAndDrinkTaxable") === 1 ? t("salesTaxStatePct") + t("salesTaxLocalPct") : 0;
 
 export const MIAMI_COFFEE_PROVENANCE: Record<string, Provenance> = {
   retailRent: { value: "$31.92 (Miami submarket, lowest), $50.27 (county average), $97.85 (Miami Beach, highest) per sq ft per year", kind: "sourced", asOf: "Q3 2026",
@@ -43,6 +49,9 @@ export const MIAMI_COFFEE_PROVENANCE: Record<string, Provenance> = {
   employmentTax: { value: "self-employment tax 15.3% on 92.35% of profit; Social Security part stops at $184,500 of earnings", kind: "sourced", asOf: "tax year 2026",
     source: "2026 Social Security wage base of $184,500 and unchanged FICA rates, per payroll guides read today; the 92.35% factor is from general knowledge",
     note: "Income tax, the half-of-SE-tax deduction and the qualified business income deduction are not modeled." },
+  localTaxes: { value: "7% sales tax on tickets, $313 certificate of use, $45 a year county business tax", kind: "sourced", asOf: "tax year 2026",
+    source: "src/taxpacks/fl-miami-dade.ts, which carries a link for each figure",
+    note: "The City of Miami's own business tax and the annual certificate-of-use re-inspection fee are unknown and are not charged. Bags of beans would be exempt from sales tax; the shop does not sell them yet." },
   waste: { value: "2% of tickets", kind: "estimated", asOf: "2026-11-12", source: "none" },
   ownerPersonal: { value: "job take-home $3,800 a month, living costs $4,000 a month", kind: "estimated", asOf: "2026-11-12", source: "none", note: "Placeholders until the personal-finance layer is sourced." },
   everythingElse: { value: "price elasticity 1.2, opening awareness 35%, 120-day ramp, weekday pattern, daypart split 50/30/20, 30 tickets per person-hour, 5-day shelf life, 2.9% card fee, 60-day buildout, 2-month deposit, loan at 10.5% over 7 years",
@@ -70,6 +79,7 @@ export const MIAMI_COFFEE: CoffeeConfig = {
   unitCostCents: 2_54, shelfLifeDays: 5, parDays: 2,
   monthlyUtilitiesCents: 900_00, monthlyInsuranceCents: 300_00, monthlyMarketingCents: 600_00, monthlyOtherCents: 900_00,
   cardFeePct: 2.9, repairsPctOfSales: 2, wastePct: 2,
+  salesTaxPct: SALES_TAX_PCT, certificateOfUseCents: t("certificateOfUseInitialCents"), countyBusinessTaxCentsPerYear: t("countyBusinessTaxCentsPerYear"),
   management: "owner", managerSalaryCentsPerYear: 70_000_00, minCashAfterDrawCents: 15_000_00,
   jobNetMonthlyCents: 3_800_00, personalMonthlyExpensesCents: 4_000_00,
   entity: "pass_through", sCorpAdminMonthlyCents: 208_00,

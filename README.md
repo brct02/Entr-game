@@ -23,7 +23,7 @@ Realistic business simulation game. This repo holds the deterministic core: no A
 ## Local taxes
 
 - `src/taxpack.ts` - the format for one jurisdiction's tax facts and the validator the engine uses. A value is sourced or it is unknown; the engine stops on unknowns instead of guessing.
-- `src/taxpacks/fl-miami-dade.ts` - first pack, provisional. Two items still unknown.
+- `src/taxpacks/fl-miami-dade.ts` - first pack, provisional. Still unknown: the City of Miami business tax amount and the annual certificate-of-use re-inspection fee. The coffee shop reads its sales tax, certificate of use and county business tax from this pack.
 - `docs/tax-research-contract.md` - what a research agent must return for a new jurisdiction and how the engine treats it.
 
 ## Run

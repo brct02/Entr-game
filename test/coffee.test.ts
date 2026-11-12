@@ -97,3 +97,16 @@ test("coffee: S corporation owner is paid through payroll; pass-through owner ow
   assert.ok(neverDraws.ownerEmploymentTaxCents > 0); // tax on profit left in the business
   for (const r of [pass, scorp, neverDraws]) assert.ok(r.business.balanceSheet().balanced && r.person.balanceSheet().balanced);
 });
+
+test("coffee: sales tax is collected on top of the ticket, never counted as revenue, and passed on each month", () => {
+  const withTax = runCoffee(funded);
+  const noTax = runCoffee({ ...funded, salesTaxPct: 0 });
+  assert.equal(funded.salesTaxPct, 7);
+  const rev = (r: ReturnType<typeof runCoffee>) => r.months.reduce((s, m) => s + m.revenueCents, 0);
+  assert.equal(rev(withTax), rev(noTax)); // same customers, same sales
+  const b = withTax.business;
+  const remitted = b.entries.filter(e => e.memo === "Sales tax sent to the state").reduce((s, e) => s + (e.lines[0].debit ?? 0), 0);
+  assert.ok(Math.abs(remitted + b.balance("sales_tax_payable") - Math.round(rev(withTax) * 0.07)) < 2000); // rounding per day
+  assert.ok(b.balance("sales_tax_payable") < rev(withTax) * 0.07 / 30); // at most about a month outstanding
+  assert.ok(b.balanceSheet().balanced);
+});

@@ -84,6 +84,9 @@ export interface CoffeeConfig {
   monthlyMarketingCents: number;
   monthlyOtherCents: number;
   cardFeePct: number;
+  salesTaxPct: number;           // collected from customers on top of the ticket and passed on to the state monthly
+  certificateOfUseCents: number; // paid once when the lease is signed
+  countyBusinessTaxCentsPerYear: number; // paid at opening and every 12 months after
   repairsPctOfSales: number;     // paid monthly on the previous month's sales
   wastePct: number;              // remakes, comps and spills, as a share of tickets served
 }
@@ -113,6 +116,7 @@ function ledgers() {
     { id: "equipment", name: "Equipment", type: "asset" },
     { id: "accum_depreciation", name: "Accumulated depreciation", type: "asset" },
     { id: "wages_payable", name: "Wages payable", type: "liability" },
+    { id: "sales_tax_payable", name: "Sales tax collected, owed to the state", type: "liability" },
     { id: "loan_payable", name: "Loan payable", type: "liability" },
     { id: "owner_equity", name: "Owner equity", type: "equity" },
     { id: "owner_draws", name: "Owner draws", type: "equity" }, // carries a negative balance
@@ -172,9 +176,11 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
   const sale = (day: number, customers: number, ticket: number) => {
     if (customers === 0) return;
     const gross = customers * ticket;
-    const fee = Math.round((gross * cfg.cardFeePct) / 100);
-    biz.post({ day, memo: `${customers} tickets`, flow: "operating",
-      lines: [{ account: "cash", debit: gross - fee }, { account: "card_fees", debit: fee }, { account: "sales", credit: gross }] });
+    const tax = Math.round((gross * cfg.salesTaxPct) / 100);
+    const fee = Math.round(((gross + tax) * cfg.cardFeePct) / 100); // the card company takes its cut of the tax too
+    const lines = [{ account: "cash", debit: gross + tax - fee }, { account: "card_fees", debit: fee }, { account: "sales", credit: gross }];
+    if (tax > 0) lines.push({ account: "sales_tax_payable", credit: tax });
+    biz.post({ day, memo: `${customers} tickets`, flow: "operating", lines });
   };
 
   const cartDays = cfg.cartMonths * 30;
@@ -200,6 +206,7 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
     pay(day, "buildout", "Buildout", cfg.buildoutCostCents, "investing");
     pay(day, "equipment", "Equipment", cfg.equipmentCostCents, "investing");
     pay(day, "licenses", "Licenses and permits", cfg.licensesCents);
+    pay(day, "licenses", "Certificate of use", cfg.certificateOfUseCents);
   };
 
   try {
@@ -230,8 +237,13 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
         }
         if (phase === "buildout" && day >= leaseSignedDay + cfg.buildoutDays) { phase = "open"; openDay = day; }
 
+        if (phase === "open" && (day - openDay) % 365 === 0) pay(day, "licenses", "County business tax receipt", cfg.countyBusinessTaxCentsPerYear);
+
         // Monthly bills fall on the first day of each month.
         if (d === 0) {
+          const owedTax = biz.balance("sales_tax_payable");
+          if (owedTax > 0) biz.post({ day, memo: "Sales tax sent to the state", flow: "operating",
+            lines: [{ account: "sales_tax_payable", debit: owedTax }, { account: "cash", credit: owedTax }] });
           if (leaseSignedDay >= 0) {
             if (leaseMonth >= cfg.freeRentMonths) pay(day, "rent", "Rent", monthlyRent);
             pay(day, "rent", "Lease pass-through charges", monthlyPassThrough);

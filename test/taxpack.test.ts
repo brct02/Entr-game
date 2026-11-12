@@ -9,18 +9,20 @@ test("Miami-Dade pack is accepted, flagged provisional, and lists what is still 
   const c = validateTaxPack(FL_MIAMI_DADE_2026, 2026);
   assert.deepEqual(c.errors, []);
   assert.equal(c.provisional, true);
-  assert.deepEqual(c.unknown.sort(), ["localBusinessLicenseCentsPerYear", "preparedFoodAndDrinkTaxable"]);
+  assert.deepEqual(c.unknown.sort(), ["certificateOfUseAnnualCents", "cityBusinessTaxCentsPerYear"]);
+  assert.equal(taxValue(FL_MIAMI_DADE_2026, "preparedFoodAndDrinkTaxable", 2026), 1);
+  assert.equal(taxValue(FL_MIAMI_DADE_2026, "packagedGroceriesTaxable", 2026), 0);
   assert.equal(taxValue(FL_MIAMI_DADE_2026, "salesTaxStatePct", 2026) + taxValue(FL_MIAMI_DADE_2026, "salesTaxLocalPct", 2026), 7);
 });
 
 test("the engine refuses to guess: unknown items and bad packs stop it", () => {
-  assert.throws(() => taxValue(FL_MIAMI_DADE_2026, "localBusinessLicenseCentsPerYear", 2026), /unknown/);
+  assert.throws(() => taxValue(FL_MIAMI_DADE_2026, "cityBusinessTaxCentsPerYear", 2026), /unknown/);
   assert.throws(() => taxValue(FL_MIAMI_DADE_2026, "salesTaxStatePct", 2027), /tax year/);
   const noSource = clone(); noSource.items.salesTaxStatePct.source = "";
   assert.ok(validateTaxPack(noSource, 2026).errors.some(e => e.includes("source link")));
   const absurd = clone(); absurd.items.salesTaxLocalPct.value = 70;
   assert.ok(validateTaxPack(absurd, 2026).errors.some(e => e.includes("outside the plausible range")));
-  const sneaky = clone(); sneaky.items.preparedFoodAndDrinkTaxable.value = 1;
+  const sneaky = clone(); sneaky.items.cityBusinessTaxCentsPerYear.value = 100_00;
   assert.ok(validateTaxPack(sneaky, 2026).errors.some(e => e.includes("cannot carry a value")));
   const missing = clone(); delete (missing.items as any).lodgingTaxTotalPct;
   assert.ok(validateTaxPack(missing, 2026).errors.some(e => e.includes("missing")));
