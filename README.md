@@ -11,12 +11,19 @@ Realistic business simulation game. This repo holds the deterministic core: no A
 - `src/markets/miami.ts` - first market pack: City of Miami leased 1-bedroom. Every value is labeled sourced, derived or estimated, with its source and date. Includes the city's zoning and association gate.
 - `test/` - 13 tests: ledger rules, determinism, and a benchmark gate that fails if simulated Miami occupancy or revenue leaves the sourced ranges.
 
+## Coffee shop (first business)
+
+- `src/coffee.ts` - headless coffee shop on a daily tick with three dayparts. Two ways in: run a cart first, or sign a lease straight away if the money covers it. Models lease deposit, buildout time with rent running, equipment, perishable stock with spoilage, staffing limits and walk-outs, weekly payroll, reputation and a ramp-up in awareness.
+- `src/markets/miami-coffee.ts` - Miami-Dade inputs with a source label on each.
+- **Calibration warning:** on current inputs the shop earns 19% before owner pay at county-average rent and 31% at Miami Beach rent. Published benchmarks are 5-15% for a healthy shop and 4-5% industry average. The model is too generous. Not yet modeled: pass-through lease charges, a paid manager, repairs, discounts and waste, unemployment insurance and workers' comp. The customers-per-day figure for each location is an estimate.
+
 ## Run
 
 Needs Node 22.18 or newer. No dependencies to install.
 
     npm test
-    npm run demo
+    npm run demo          # coffee shop
+    npm run demo:rental   # short-term rental
 
 ## Known limits
 

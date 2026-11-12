@@ -6,6 +6,7 @@
   "engines": { "node": ">=22.18" },
   "scripts": {
     "test": "node --test test/*.test.ts",
-    "demo": "node src/demo.ts"
+    "demo": "node src/demo-coffee.ts",
+    "demo:rental": "node src/demo.ts"
   }
 }
