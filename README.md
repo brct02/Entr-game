@@ -20,6 +20,12 @@ Realistic business simulation game. This repo holds the deterministic core: no A
 - Legal form: pass-through (sole proprietor or default LLC, owner takes draws, owes self-employment tax on the year's profit whether drawn or not) or S corporation (owner-manager paid through payroll, extra filing cost). `src/tax.ts` holds the 2026 federal rules; income tax is not modeled yet. `npm run demo:entity` compares the two.
 - Run `npm run demo:steady` for established-shop margins and `npm run demo` for what happens with realistic starting money.
 
+## Local taxes
+
+- `src/taxpack.ts` - the format for one jurisdiction's tax facts and the validator the engine uses. A value is sourced or it is unknown; the engine stops on unknowns instead of guessing.
+- `src/taxpacks/fl-miami-dade.ts` - first pack, provisional. Two items still unknown.
+- `docs/tax-research-contract.md` - what a research agent must return for a new jurisdiction and how the engine treats it.
+
 ## Run
 
 Needs Node 22.18 or newer. No dependencies to install.
