@@ -9,7 +9,7 @@ test("Miami-Dade pack is accepted, flagged provisional, and lists what is still 
   const c = validateTaxPack(FL_MIAMI_DADE_2026, 2026);
   assert.deepEqual(c.errors, []);
   assert.equal(c.provisional, true);
-  assert.deepEqual(c.unknown.sort(), ["certificateOfUseAnnualCents", "cityBusinessTaxCentsPerYear"]);
+  assert.deepEqual(c.unknown.sort(), ["cityBusinessTaxCentsPerYear"]);
   assert.equal(taxValue(FL_MIAMI_DADE_2026, "preparedFoodAndDrinkTaxable", 2026), 1);
   assert.equal(taxValue(FL_MIAMI_DADE_2026, "packagedGroceriesTaxable", 2026), 0);
   assert.equal(taxValue(FL_MIAMI_DADE_2026, "salesTaxStatePct", 2026) + taxValue(FL_MIAMI_DADE_2026, "salesTaxLocalPct", 2026), 7);

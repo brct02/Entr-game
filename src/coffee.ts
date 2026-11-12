@@ -87,6 +87,7 @@ export interface CoffeeConfig {
   salesTaxPct: number;           // collected from customers on top of the ticket and passed on to the state monthly
   certificateOfUseCents: number; // paid once when the lease is signed
   countyBusinessTaxCentsPerYear: number; // paid at opening and every 12 months after
+  certificateOfUseAnnualCents: number;   // yearly reinspection, from the first anniversary of opening
   repairsPctOfSales: number;     // paid monthly on the previous month's sales
   wastePct: number;              // remakes, comps and spills, as a share of tickets served
 }
@@ -237,7 +238,10 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
         }
         if (phase === "buildout" && day >= leaseSignedDay + cfg.buildoutDays) { phase = "open"; openDay = day; }
 
-        if (phase === "open" && (day - openDay) % 365 === 0) pay(day, "licenses", "County business tax receipt", cfg.countyBusinessTaxCentsPerYear);
+        if (phase === "open" && (day - openDay) % 365 === 0) {
+          pay(day, "licenses", "County business tax receipt", cfg.countyBusinessTaxCentsPerYear);
+          if (day > openDay) pay(day, "licenses", "Certificate of use reinspection", cfg.certificateOfUseAnnualCents);
+        }
 
         // Monthly bills fall on the first day of each month.
         if (d === 0) {

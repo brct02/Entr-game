@@ -30,7 +30,7 @@ export const FL_MIAMI_DADE_2026: TaxPack = {
       note: "City of Miami requires its own receipt as well as the county's. The amount is set in City Code section 31-50, by seats for restaurants; the figure was not found. An AI search summary gave $55 to $150, but the city page it cited (Get a Business Tax Receipt) states no amounts, so it is not accepted." },
     certificateOfUseInitialCents: src(313_00, "https://www.miami.gov/Business-Licenses/Certificate-of-Use-and-Accessory-Use%E2%80%93-Application-Inspection-Fees", "read 12 Nov 2026",
       true, "City of Miami, commercial use, first 2,000 sq ft. The $50 application fee is credited toward it. $63 for each further 1,000 sq ft."),
-    certificateOfUseAnnualCents: { value: null, kind: "unknown", source: "", official: false, asOf: "",
-      note: "The city lists annual re-inspection fees for commercial premises; the amount was not captured." },
+    certificateOfUseAnnualCents: src(63_00, "https://www.miami.gov/files/assets/public/v/1/fs-exhibit-a-pz-chpts-2-23-62.pdf", "fee schedule adopted 23 Apr 2026",
+      true, "City of Miami annual reinspection, commercial, 500 to under 2,500 sq ft. $50 under 500 sq ft; $75 for 2,500 to under 5,000. Late penalty 10% then 5% a month, capped at 25%."),
   },
 };
