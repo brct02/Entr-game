@@ -27,7 +27,7 @@ export const FL_MIAMI_DADE_2026: TaxPack = {
     countyBusinessTaxCentsPerYear: src(45_00, "https://www.mdctaxcollector.gov/categories-e-g", "read 12 Nov 2026",
       true, "Eating establishment inside a city, 1 to 30 seats. $90 for 31-74 seats, $135 for 75-149, $180 for 150 or more. Read from the search result; the page itself would not load."),
     cityBusinessTaxCentsPerYear: { value: null, kind: "unknown", source: "", official: false, asOf: "",
-      note: "City of Miami requires its own receipt as well as the county's. The amount is set in City Code section 31-50, by seats for restaurants; the figure was not found." },
+      note: "City of Miami requires its own receipt as well as the county's. The amount is set in City Code section 31-50, by seats for restaurants; the figure was not found. An AI search summary gave $55 to $150, but the city page it cited (Get a Business Tax Receipt) states no amounts, so it is not accepted." },
     certificateOfUseInitialCents: src(313_00, "https://www.miami.gov/Business-Licenses/Certificate-of-Use-and-Accessory-Use%E2%80%93-Application-Inspection-Fees", "read 12 Nov 2026",
       true, "City of Miami, commercial use, first 2,000 sq ft. The $50 application fee is credited toward it. $63 for each further 1,000 sq ft."),
     certificateOfUseAnnualCents: { value: null, kind: "unknown", source: "", official: false, asOf: "",
