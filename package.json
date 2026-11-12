@@ -8,6 +8,7 @@
     "test": "node --test test/*.test.ts",
     "demo": "node src/demo-coffee.ts",
     "demo:steady": "node src/demo-coffee-steady.ts",
+    "demo:entity": "node src/demo-entity.ts",
     "demo:rental": "node src/demo.ts"
   }
 }

@@ -17,6 +17,7 @@ Realistic business simulation game. This repo holds the deterministic core: no A
 - `src/markets/miami-coffee.ts` - Miami-Dade inputs with a source label on each.
 - Two ways to run it: the owner manages full time and takes a monthly draw when cash allows, or a salaried manager runs it and the owner keeps their job. The owner's personal cash is tracked either way.
 - **Calibration status:** at county-average rent an established shop earns about 15% before the owner's draw, or about 2% after paying a hired manager, which is in line with published benchmarks (4-5% industry average, 5-15% healthy). The lower-rent location loses money with a hired manager. The Miami Beach location still earns 20-28%, which is too high: its 300 customers a day is a guess.
+- Legal form: pass-through (sole proprietor or default LLC, owner takes draws, owes self-employment tax on the year's profit whether drawn or not) or S corporation (owner-manager paid through payroll, extra filing cost). `src/tax.ts` holds the 2026 federal rules; income tax is not modeled yet. `npm run demo:entity` compares the two.
 - Run `npm run demo:steady` for established-shop margins and `npm run demo` for what happens with realistic starting money.
 
 ## Run

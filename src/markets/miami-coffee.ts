@@ -38,6 +38,11 @@ export const MIAMI_COFFEE_PROVENANCE: Record<string, Provenance> = {
     note: "The remaining 1.5% is an estimate for workers' comp and federal unemployment tax; no source found." },
   repairs: { value: "2% of sales", kind: "sourced", asOf: "undated",
     source: "National Restaurant Association average of about 1.5% of sales as reported by FSR Magazine; ResQ puts restaurants at 3-4%", note: "Restaurant figures, not coffee-shop figures." },
+  sCorpAdmin: { value: "$2,500 a year for payroll service and the extra tax return", kind: "sourced", asOf: "2026",
+    source: "Published ranges of $1,500-$4,000 a year (jupid.com S corp guide, uplinq.com); individual guides quote $2,400-$4,000" },
+  employmentTax: { value: "self-employment tax 15.3% on 92.35% of profit; Social Security part stops at $184,500 of earnings", kind: "sourced", asOf: "tax year 2026",
+    source: "2026 Social Security wage base of $184,500 and unchanged FICA rates, per payroll guides read today; the 92.35% factor is from general knowledge",
+    note: "Income tax, the half-of-SE-tax deduction and the qualified business income deduction are not modeled." },
   waste: { value: "2% of tickets", kind: "estimated", asOf: "2026-11-12", source: "none" },
   ownerPersonal: { value: "job take-home $3,800 a month, living costs $4,000 a month", kind: "estimated", asOf: "2026-11-12", source: "none", note: "Placeholders until the personal-finance layer is sourced." },
   everythingElse: { value: "price elasticity 1.2, opening awareness 35%, 120-day ramp, weekday pattern, daypart split 50/30/20, 30 tickets per person-hour, 5-day shelf life, 2.9% card fee, 60-day buildout, 2-month deposit, loan at 10.5% over 7 years",
@@ -67,4 +72,5 @@ export const MIAMI_COFFEE: CoffeeConfig = {
   cardFeePct: 2.9, repairsPctOfSales: 2, wastePct: 2,
   management: "owner", managerSalaryCentsPerYear: 70_000_00, minCashAfterDrawCents: 15_000_00,
   jobNetMonthlyCents: 3_800_00, personalMonthlyExpensesCents: 4_000_00,
+  entity: "pass_through", sCorpAdminMonthlyCents: 208_00,
 };

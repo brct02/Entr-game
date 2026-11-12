@@ -84,3 +84,16 @@ test("coffee: an owner-manager whose shop cannot pay them runs out of personal m
   assert.equal(r.failedReason, "the owner ran out of personal money");
   assert.ok(r.skippedDraws >= 0);
 });
+
+test("coffee: S corporation owner is paid through payroll; pass-through owner owes self-employment tax on profit even when undrawn", () => {
+  const pass = runCoffee(funded);
+  const scorp = runCoffee({ ...funded, entity: "s_corp" });
+  const last = (r: ReturnType<typeof runCoffee>) => r.business.entries[r.business.entries.length - 1].day;
+  assert.ok(scorp.ownerSalaryCents > 0 && scorp.ownerDrawsCents === 0);
+  assert.ok(scorp.business.incomeStatement(0, last(scorp)).expenses["Owner salary"] > 0);
+  assert.ok(pass.ownerEmploymentTaxCents > 0 && pass.ownerSalaryCents === 0);
+  const neverDraws = runCoffee({ ...funded, personalCashCents: 900_000_00, minCashAfterDrawCents: 900_000_00 });
+  assert.equal(neverDraws.ownerDrawsCents, 0);
+  assert.ok(neverDraws.ownerEmploymentTaxCents > 0); // tax on profit left in the business
+  for (const r of [pass, scorp, neverDraws]) assert.ok(r.business.balanceSheet().balanced && r.person.balanceSheet().balanced);
+});

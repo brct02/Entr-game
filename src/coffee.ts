@@ -4,6 +4,7 @@
 import { Ledger, LedgerError, ownerContribution } from "./ledger.ts";
 import { amortize, straightLine } from "./schedules.ts";
 import { makeRng } from "./rng.ts";
+import { selfEmploymentTax } from "./tax.ts";
 
 export interface CoffeeLocation {
   name: string;
@@ -59,6 +60,12 @@ export interface CoffeeConfig {
   jobNetMonthlyCents: number;        // the owner's take-home pay from their job (hired-manager route only)
   personalMonthlyExpensesCents: number;
 
+  // Legal form. "pass_through": sole proprietor or default LLC; the owner takes draws and owes self-employment tax on
+  // the year's profit whether or not they drew it. "s_corp": an owner who works in the business is paid a salary
+  // through payroll, and the business carries the extra filing and payroll-service cost.
+  entity: "pass_through" | "s_corp";
+  sCorpAdminMonthlyCents: number;
+
   // Staff
   staffPerDaypart: number[];     // people on the floor
   ownerOnBar: number[];          // how many of those are the unpaid owner (0 or 1 each)
@@ -91,6 +98,8 @@ export interface CoffeeResult {
   cart: { days: number; avgDailyCustomers: number } | null;
   failedOnDay: number | null; failedPhase: Phase | null; failedReason: string | null;
   ownerDrawsCents: number; skippedDraws: number;
+  ownerSalaryCents: number;         // gross salary paid to an S corporation owner
+  ownerEmploymentTaxCents: number;  // self-employment tax, or both halves of payroll tax on the owner's salary
 }
 
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -112,6 +121,8 @@ function ledgers() {
     { id: "spoilage", name: "Waste and spoilage", type: "expense" },
     { id: "wages", name: "Wages", type: "expense" },
     { id: "manager_salary", name: "Manager salary", type: "expense" },
+    { id: "owner_salary", name: "Owner salary", type: "expense" },
+    { id: "entity_admin", name: "S corporation payroll and filing costs", type: "expense" },
     { id: "repairs", name: "Repairs and maintenance", type: "expense" },
     { id: "payroll_tax", name: "Payroll tax", type: "expense" },
     { id: "rent", name: "Rent", type: "expense" },
@@ -132,6 +143,7 @@ function ledgers() {
     { id: "job_income", name: "Job income", type: "revenue" },
     { id: "business_income", name: "Draws from the business", type: "revenue" },
     { id: "living_expenses", name: "Living expenses", type: "expense" },
+    { id: "employment_tax", name: "Self-employment and payroll tax", type: "expense" },
   ]);
   return { business, person };
 }
@@ -141,7 +153,7 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
   const { business: biz, person } = ledgers();
   const months: CoffeeMonth[] = [];
   const result: CoffeeResult = { business: biz, person, months, cart: null, failedOnDay: null, failedPhase: null, failedReason: null,
-    ownerDrawsCents: 0, skippedDraws: 0 };
+    ownerDrawsCents: 0, skippedDraws: 0, ownerSalaryCents: 0, ownerEmploymentTaxCents: 0 };
   if (cfg.management === "hired" && (cfg.ownerOnBar.some(n => n > 0) || cfg.cartMonths > 0))
     throw new Error("an owner who keeps their job cannot also work the bar or the cart");
   const personal = (fn: () => void) => {
@@ -238,7 +250,21 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
           const trading = phase === "open" || phase === "cart";
           if (cfg.management === "hired" && cfg.jobNetMonthlyCents > 0)
             person.post({ day, memo: "Job pay", flow: "operating", lines: [{ account: "cash", debit: cfg.jobNetMonthlyCents }, { account: "job_income", credit: cfg.jobNetMonthlyCents }] });
-          if (cfg.management === "owner" && trading && m > 0) {
+          if (cfg.entity === "s_corp" && leaseSignedDay >= 0 || cfg.entity === "s_corp" && trading)
+            pay(day, "entity_admin", "S corporation payroll and filing costs", cfg.sCorpAdminMonthlyCents);
+          if (cfg.management === "owner" && trading && m > 0 && cfg.entity === "s_corp") {
+            // Salary through payroll: the business pays gross plus the employer's 7.65%; the owner's 7.65% is withheld.
+            const gross = Math.round(cfg.managerSalaryCentsPerYear / 12);
+            const half = Math.round(gross * 0.0765);
+            if (biz.cash() - gross - half >= cfg.minCashAfterDrawCents) {
+              biz.post({ day, memo: "Owner salary", flow: "operating", lines: [
+                { account: "owner_salary", debit: gross }, { account: "payroll_tax", debit: half }, { account: "cash", credit: gross + half } ] });
+              person.post({ day, memo: "Salary from the business", flow: "operating", lines: [
+                { account: "cash", debit: gross - half }, { account: "employment_tax", debit: half }, { account: "business_income", credit: gross } ] });
+              drawn += gross; result.ownerSalaryCents += gross; result.ownerEmploymentTaxCents += 2 * half;
+            } else result.skippedDraws++;
+          }
+          if (cfg.management === "owner" && trading && m > 0 && cfg.entity === "pass_through") {
             const draw = Math.round(cfg.managerSalaryCentsPerYear / 12);
             if (biz.cash() - draw >= cfg.minCashAfterDrawCents) {
               biz.post({ day, memo: "Owner draw", flow: "financing", lines: [{ account: "owner_draws", debit: draw }, { account: "cash", credit: draw }] });
@@ -337,6 +363,16 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
       if (!biz.balanceSheet().balanced || !person.balanceSheet().balanced) throw new Error("books out of balance");
       const is = biz.incomeStatement(monthStart, lastDay);
       lastMonthSales = is.totalRevenue;
+      // Year end: a pass-through owner owes self-employment tax on the year's profit, drawn or not.
+      // shortcut: paid in one sum at year end; real owners pay quarterly estimates and settle in April.
+      if (cfg.entity === "pass_through" && m % 12 === 11) {
+        const tax = selfEmploymentTax(biz.incomeStatement(day - 365, lastDay).netIncome);
+        if (tax > 0) {
+          personal(() => person.post({ day: lastDay, memo: "Self-employment tax", flow: "operating",
+            lines: [{ account: "employment_tax", debit: tax }, { account: "cash", credit: tax }] }));
+          result.ownerEmploymentTaxCents += tax;
+        }
+      }
       months.push({ month: m + 1, phase: phase === "open" ? "open" : phaseAtStart, customersPerDay: customers / Math.max(1, tradedDays),
         revenueCents: is.totalRevenue, netIncomeCents: is.netIncome, cashCents: biz.cash(), walkouts, spoilageCents: spoiled, ownerDrawCents: drawn });
     }
