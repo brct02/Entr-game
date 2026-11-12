@@ -34,7 +34,7 @@ test("coffee benchmark gate: mature shop sits inside published ranges", () => {
     assert.ok(revenue >= 300_000 && revenue <= 650_000, `annual revenue $${revenue.toFixed(0)}`);
     const b = r.business; const last = b.entries[b.entries.length - 1].day;
     const is = b.incomeStatement(0, last);
-    const gross = 1 - (is.expenses["Cost of goods sold"] + (is.expenses["Spoilage"] ?? 0)) / is.totalRevenue;
+    const gross = 1 - (is.expenses["Cost of goods sold"] + (is.expenses["Waste and spoilage"] ?? 0)) / is.totalRevenue;
     assert.ok(gross >= 0.65 && gross <= 0.75, `gross margin ${gross.toFixed(3)}`);
   }
 });
@@ -64,4 +64,23 @@ test("coffee: decisions have consequences", () => {
 
 test("coffee: every market-pack value carries a source label", () => {
   for (const [k, p] of Object.entries(MIAMI_COFFEE_PROVENANCE)) assert.ok(p.source.length > 0 && p.asOf.length > 0 && p.kind, k);
+});
+
+test("coffee: owner-manager draws pay when cash allows; a hired manager costs a salary and the owner keeps their job", () => {
+  const owner = runCoffee(funded);
+  const hired = runCoffee({ ...funded, management: "hired" });
+  const last = (r: ReturnType<typeof runCoffee>) => r.business.entries[r.business.entries.length - 1].day;
+  assert.ok(owner.ownerDrawsCents > 0);
+  assert.equal(hired.ownerDrawsCents, 0);
+  assert.equal(owner.business.incomeStatement(0, last(owner)).expenses["Manager salary"], undefined);
+  assert.ok(hired.business.incomeStatement(0, last(hired)).expenses["Manager salary"] > 100_000_00);
+  assert.ok(hired.person.balance("job_income") > 0 && owner.person.balance("job_income") === 0);
+  assert.ok(owner.business.balanceSheet().balanced && hired.business.balanceSheet().balanced);
+  assert.throws(() => runCoffee({ ...funded, management: "hired", ownerOnBar: [1, 0, 0] }));
+});
+
+test("coffee: an owner-manager whose shop cannot pay them runs out of personal money", () => {
+  const r = runCoffee({ ...MIAMI_COFFEE, personalCashCents: 80_000_00, contributionCents: 70_000_00, minCashAfterDrawCents: 500_000_00 });
+  assert.equal(r.failedReason, "the owner ran out of personal money");
+  assert.ok(r.skippedDraws >= 0);
 });

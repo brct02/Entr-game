@@ -10,6 +10,7 @@ export interface CoffeeLocation {
   rentPerSqFtYearCents: number;
   sqFt: number;
   matureDailyCustomers: number; // walk-in customers per day at the reference ticket once the shop is known
+  passThroughPerSqFtYearCents: number; // taxes, insurance and common-area charges billed on top of base rent
 }
 
 export interface CoffeeConfig {
@@ -50,11 +51,19 @@ export interface CoffeeConfig {
   daypartShare: number[];        // 3 shares of the day's customers: morning, midday, afternoon
   hoursPerDaypart: number;
 
+  // Who runs it. "owner": the owner manages full time, has no other job, and takes a monthly draw when cash allows.
+  // "hired": a salaried manager runs it, the owner keeps their job and is paid only out of profits.
+  management: "owner" | "hired";
+  managerSalaryCentsPerYear: number; // the hired manager's salary, and the size of the owner-manager's draw
+  minCashAfterDrawCents: number;     // the owner skips the draw if it would leave the business with less than this
+  jobNetMonthlyCents: number;        // the owner's take-home pay from their job (hired-manager route only)
+  personalMonthlyExpensesCents: number;
+
   // Staff
   staffPerDaypart: number[];     // people on the floor
   ownerOnBar: number[];          // how many of those are the unpaid owner (0 or 1 each)
   wageCentsPerHour: number;
-  payrollTaxPct: number;
+  payrollTaxPct: number;          // employer payroll taxes plus workers' comp, as a share of wages
   drinksPerPersonHour: number;
 
   // Stock
@@ -68,17 +77,20 @@ export interface CoffeeConfig {
   monthlyMarketingCents: number;
   monthlyOtherCents: number;
   cardFeePct: number;
+  repairsPctOfSales: number;     // paid monthly on the previous month's sales
+  wastePct: number;              // remakes, comps and spills, as a share of tickets served
 }
 
 export type Phase = "cart" | "buildout" | "open" | "idle";
 export interface CoffeeMonth {
   month: number; phase: Phase; customersPerDay: number; revenueCents: number; netIncomeCents: number;
-  cashCents: number; walkouts: number; spoilageCents: number;
+  cashCents: number; walkouts: number; spoilageCents: number; ownerDrawCents: number;
 }
 export interface CoffeeResult {
   business: Ledger; person: Ledger; months: CoffeeMonth[];
   cart: { days: number; avgDailyCustomers: number } | null;
   failedOnDay: number | null; failedPhase: Phase | null; failedReason: string | null;
+  ownerDrawsCents: number; skippedDraws: number;
 }
 
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -94,10 +106,13 @@ function ledgers() {
     { id: "wages_payable", name: "Wages payable", type: "liability" },
     { id: "loan_payable", name: "Loan payable", type: "liability" },
     { id: "owner_equity", name: "Owner equity", type: "equity" },
+    { id: "owner_draws", name: "Owner draws", type: "equity" }, // carries a negative balance
     { id: "sales", name: "Sales", type: "revenue" },
     { id: "cogs", name: "Cost of goods sold", type: "expense" },
-    { id: "spoilage", name: "Spoilage", type: "expense" },
+    { id: "spoilage", name: "Waste and spoilage", type: "expense" },
     { id: "wages", name: "Wages", type: "expense" },
+    { id: "manager_salary", name: "Manager salary", type: "expense" },
+    { id: "repairs", name: "Repairs and maintenance", type: "expense" },
     { id: "payroll_tax", name: "Payroll tax", type: "expense" },
     { id: "rent", name: "Rent", type: "expense" },
     { id: "utilities", name: "Utilities", type: "expense" },
@@ -114,6 +129,9 @@ function ledgers() {
     { id: "cash", name: "Cash", type: "asset", isCash: true },
     { id: "investment_in_business", name: "Investment in business", type: "asset" },
     { id: "opening_equity", name: "Opening net worth", type: "equity" },
+    { id: "job_income", name: "Job income", type: "revenue" },
+    { id: "business_income", name: "Draws from the business", type: "revenue" },
+    { id: "living_expenses", name: "Living expenses", type: "expense" },
   ]);
   return { business, person };
 }
@@ -122,7 +140,13 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
   const rng = makeRng(cfg.seed);
   const { business: biz, person } = ledgers();
   const months: CoffeeMonth[] = [];
-  const result: CoffeeResult = { business: biz, person, months, cart: null, failedOnDay: null, failedPhase: null, failedReason: null };
+  const result: CoffeeResult = { business: biz, person, months, cart: null, failedOnDay: null, failedPhase: null, failedReason: null,
+    ownerDrawsCents: 0, skippedDraws: 0 };
+  if (cfg.management === "hired" && (cfg.ownerOnBar.some(n => n > 0) || cfg.cartMonths > 0))
+    throw new Error("an owner who keeps their job cannot also work the bar or the cart");
+  const personal = (fn: () => void) => {
+    try { fn(); } catch (e) { throw e instanceof LedgerError ? new LedgerError("the owner ran out of personal money") : e; }
+  };
 
   // A count of customers around an expected value: real chance, not the average every day.
   const draw = (mean: number) => {
@@ -143,6 +167,8 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
 
   const cartDays = cfg.cartMonths * 30;
   const monthlyRent = Math.round((cfg.location.rentPerSqFtYearCents * cfg.location.sqFt) / 12);
+  const monthlyPassThrough = Math.round((cfg.location.passThroughPerSqFtYearCents * cfg.location.sqFt) / 12);
+  let lastMonthSales = 0;
   const loan = cfg.loan ? amortize(cfg.loan.principalCents, cfg.loan.annualRatePct, cfg.loan.months) : [];
   const depreciation: { schedule: number[]; start: number }[] = [];
 
@@ -176,7 +202,7 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
     for (let m = 0; m < cfg.months; m++) {
       const monthStart = day;
       const calMonth = m % 12;
-      let customers = 0, walkouts = 0, spoiled = 0, tradedDays = 0;
+      let customers = 0, walkouts = 0, spoiled = 0, tradedDays = 0, drawn = 0;
       const phaseAtStart = phase;
 
       for (let d = 0; d < MONTH_DAYS[calMonth]; d++, day++) {
@@ -196,6 +222,7 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
         if (d === 0) {
           if (leaseSignedDay >= 0) {
             if (leaseMonth >= cfg.freeRentMonths) pay(day, "rent", "Rent", monthlyRent);
+            pay(day, "rent", "Lease pass-through charges", monthlyPassThrough);
             const p = loan[leaseMonth];
             if (p) { pay(day, "interest", "Loan interest", p.interest); pay(day, "loan_payable", "Loan principal", p.principal, "financing"); }
             leaseMonth++;
@@ -205,7 +232,22 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
             pay(day, "insurance", "Insurance", cfg.monthlyInsuranceCents);
             pay(day, "marketing", "Marketing", cfg.monthlyMarketingCents);
             pay(day, "other_operating", "Supplies and other", cfg.monthlyOtherCents);
+            pay(day, "repairs", "Repairs and maintenance", Math.round((lastMonthSales * cfg.repairsPctOfSales) / 100));
           }
+          // The owner's own month: job pay if they kept the job, a draw if they run the shop, then living costs.
+          const trading = phase === "open" || phase === "cart";
+          if (cfg.management === "hired" && cfg.jobNetMonthlyCents > 0)
+            person.post({ day, memo: "Job pay", flow: "operating", lines: [{ account: "cash", debit: cfg.jobNetMonthlyCents }, { account: "job_income", credit: cfg.jobNetMonthlyCents }] });
+          if (cfg.management === "owner" && trading && m > 0) {
+            const draw = Math.round(cfg.managerSalaryCentsPerYear / 12);
+            if (biz.cash() - draw >= cfg.minCashAfterDrawCents) {
+              biz.post({ day, memo: "Owner draw", flow: "financing", lines: [{ account: "owner_draws", debit: draw }, { account: "cash", credit: draw }] });
+              person.post({ day, memo: "Draw from the business", flow: "operating", lines: [{ account: "cash", debit: draw }, { account: "business_income", credit: draw }] });
+              drawn += draw; result.ownerDrawsCents += draw;
+            } else result.skippedDraws++;
+          }
+          if (cfg.personalMonthlyExpensesCents > 0) personal(() => person.post({ day, memo: "Living expenses", flow: "operating",
+            lines: [{ account: "living_expenses", debit: cfg.personalMonthlyExpensesCents }, { account: "cash", credit: cfg.personalMonthlyExpensesCents }] }));
         }
 
         const dow = cfg.dayOfWeek[day % 7];
@@ -253,9 +295,23 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
           sale(day, served, cfg.ticketCents);
           if (served > 0) biz.post({ day, memo: "Cost of tickets sold", flow: "operating",
             lines: [{ account: "cogs", debit: served * cfg.unitCostCents }, { account: "inventory", credit: served * cfg.unitCostCents }] });
+          const wasted = Math.min(batches.reduce((t, b) => t + b.units, 0), Math.round((served * cfg.wastePct) / 100));
+          if (wasted > 0) {
+            let w = wasted;
+            for (const b of batches) { const u = Math.min(b.units, w); b.units -= u; w -= u; }
+            batches = batches.filter(b => b.units > 0);
+            biz.post({ day, memo: "Remakes, comps and spills", flow: "operating",
+              lines: [{ account: "spoilage", debit: wasted * cfg.unitCostCents }, { account: "inventory", credit: wasted * cfg.unitCostCents }] });
+            spoiled += wasted * cfg.unitCostCents;
+          }
           const wages = paidHours * cfg.wageCentsPerHour;
           if (wages > 0) biz.post({ day, memo: "Wages earned", flow: "operating",
             lines: [{ account: "wages", debit: wages }, { account: "wages_payable", credit: wages }] });
+          if (cfg.management === "hired") {
+            const salary = Math.round(cfg.managerSalaryCentsPerYear / 365);
+            biz.post({ day, memo: "Manager salary earned", flow: "operating",
+              lines: [{ account: "manager_salary", debit: salary }, { account: "wages_payable", credit: salary }] });
+          }
 
           // Turning people away costs you later; a good run slowly earns it back.
           reputation = Math.max(0.7, Math.min(1, reputation + 0.003 * (1 - reputation) - 0.25 * (demand ? lost / demand : 0)));
@@ -280,8 +336,9 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
       }
       if (!biz.balanceSheet().balanced || !person.balanceSheet().balanced) throw new Error("books out of balance");
       const is = biz.incomeStatement(monthStart, lastDay);
+      lastMonthSales = is.totalRevenue;
       months.push({ month: m + 1, phase: phase === "open" ? "open" : phaseAtStart, customersPerDay: customers / Math.max(1, tradedDays),
-        revenueCents: is.totalRevenue, netIncomeCents: is.netIncome, cashCents: biz.cash(), walkouts, spoilageCents: spoiled });
+        revenueCents: is.totalRevenue, netIncomeCents: is.netIncome, cashCents: biz.cash(), walkouts, spoilageCents: spoiled, ownerDrawCents: drawn });
     }
   } catch (e) {
     if (!(e instanceof LedgerError)) throw e;

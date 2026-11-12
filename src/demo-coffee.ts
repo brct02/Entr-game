@@ -16,17 +16,23 @@ function report(label: string, cfg: CoffeeConfig) {
     const last = b.entries[b.entries.length - 1].day;
     const is = b.incomeStatement(last - 364, last);
     const pct = (x: number) => ((100 * x) / is.totalRevenue).toFixed(1).padStart(5) + "%";
-    console.log(`Last 12 months: ${(y.reduce((s, m) => s + m.customersPerDay, 0) / 12).toFixed(0)} customers a day, revenue ${dollars(is.totalRevenue)}, profit before owner pay ${dollars(is.netIncome)} (${pct(is.netIncome).trim()})`);
+    const draws = y.reduce((s, m) => s + m.ownerDrawCents, 0);
+    console.log(`Last 12 months: ${(y.reduce((s, m) => s + m.customersPerDay, 0) / 12).toFixed(0)} customers a day, revenue ${dollars(is.totalRevenue)}`);
+    console.log(cfg.management === "owner"
+      ? `   profit ${dollars(is.netIncome)} (${pct(is.netIncome).trim()}); owner drew ${dollars(draws)}; left after the draw ${dollars(is.netIncome - draws)} (${pct(is.netIncome - draws).trim()})`
+      : `   profit after the manager's salary ${dollars(is.netIncome)} (${pct(is.netIncome).trim()}); owner kept their job`);
     const e = is.expenses;
-    console.log(`   goods and spoilage ${pct(e["Cost of goods sold"] + (e["Spoilage"] ?? 0))} | wages and payroll tax ${pct(e["Wages"] + e["Payroll tax"])} | rent ${pct(e["Rent"])}`);
+    console.log(`   goods and waste ${pct(e["Cost of goods sold"] + (e["Waste and spoilage"] ?? 0))} | staff ${pct(e["Wages"] + e["Payroll tax"] + (e["Manager salary"] ?? 0))} | rent and pass-throughs ${pct(e["Rent"])} | skipped draws: ${r.skippedDraws}`);
+    console.log(`   owner's personal cash at the end: ${dollars(r.person.cash())}`);
   }
 }
 
 console.log("Miami-Dade independent coffee shop. Inputs and their sources: src/markets/miami-coffee.ts");
-report("Straight to a lease, county-average rent, $70k own money + $100k loan", MIAMI_COFFEE);
+report("Owner-managed, county-average rent, $70k own money + $100k loan", MIAMI_COFFEE);
+report("Hired manager, owner keeps their job, same shop and money", { ...MIAMI_COFFEE, management: "hired" });
+report("Hired manager, Miami Beach rent", { ...MIAMI_COFFEE, management: "hired", location: L.prime });
+report("Hired manager, lower-rent submarket", { ...MIAMI_COFFEE, management: "hired", location: L.value });
 report("Cart for 3 months first, then the same lease", { ...MIAMI_COFFEE, cartMonths: 3, months: 39, personalCashCents: 110_000_00, contributionCents: 90_000_00 });
 report("Cart only, $30k, no loan, 12 months", { ...MIAMI_COFFEE, cartMonths: 12, openShop: false, months: 12, loan: undefined, contributionCents: 30_000_00 });
-report("Straight to Miami Beach rent, same money", { ...MIAMI_COFFEE, location: L.prime });
-report("Lower-rent submarket, same money", { ...MIAMI_COFFEE, location: L.value });
-report("County-average rent, owner works the bar mornings and midday", { ...MIAMI_COFFEE, ownerOnBar: [1, 1, 0] });
+report("Owner-managed, lower-rent submarket", { ...MIAMI_COFFEE, location: L.value });
 report("Thin capital: $40k own + $60k loan", { ...MIAMI_COFFEE, contributionCents: 40_000_00, loan: { principalCents: 60_000_00, annualRatePct: 10.5, months: 84 } });

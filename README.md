@@ -15,7 +15,9 @@ Realistic business simulation game. This repo holds the deterministic core: no A
 
 - `src/coffee.ts` - headless coffee shop on a daily tick with three dayparts. Two ways in: run a cart first, or sign a lease straight away if the money covers it. Models lease deposit, buildout time with rent running, equipment, perishable stock with spoilage, staffing limits and walk-outs, weekly payroll, reputation and a ramp-up in awareness.
 - `src/markets/miami-coffee.ts` - Miami-Dade inputs with a source label on each.
-- **Calibration warning:** on current inputs the shop earns 19% before owner pay at county-average rent and 31% at Miami Beach rent. Published benchmarks are 5-15% for a healthy shop and 4-5% industry average. The model is too generous. Not yet modeled: pass-through lease charges, a paid manager, repairs, discounts and waste, unemployment insurance and workers' comp. The customers-per-day figure for each location is an estimate.
+- Two ways to run it: the owner manages full time and takes a monthly draw when cash allows, or a salaried manager runs it and the owner keeps their job. The owner's personal cash is tracked either way.
+- **Calibration status:** at county-average rent an established shop earns about 15% before the owner's draw, or about 2% after paying a hired manager, which is in line with published benchmarks (4-5% industry average, 5-15% healthy). The lower-rent location loses money with a hired manager. The Miami Beach location still earns 20-28%, which is too high: its 300 customers a day is a guess.
+- Run `npm run demo:steady` for established-shop margins and `npm run demo` for what happens with realistic starting money.
 
 ## Run
 
