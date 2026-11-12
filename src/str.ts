@@ -21,9 +21,10 @@ export interface StrConfig {
   referenceRateCents: number;     // what the market expects for this unit
   priceElasticity: number;        // how fast bookings fall as price rises above reference
   baseDailyBookingProb: number;   // chance a vacant day gets booked at the reference rate, average season
-  seasonality: number[];          // 12 multipliers, Jan..Dec
+  seasonality: number[];          // 12 booking-demand multipliers, Jan..Dec
+  rateSeasonality?: number[];     // 12 nightly-rate multipliers, Jan..Dec (market-wide seasonal pricing). Default: flat
   maxStayNights: number;
-  cleaningFeeCents: number;       // charged to guest per stay
+  cleaningFeeCents: number;       // charged to guest per stay; the platform fee applies to it too
   cleaningCostCents: number;      // paid to cleaner per stay
   platformFeePct: number;
 }
@@ -115,18 +116,25 @@ export function runStr(cfg: StrConfig): StrResult {
       }
 
       const season = cfg.seasonality[calMonth];
+      const nightly = Math.round(cfg.nightlyRateCents * (cfg.rateSeasonality?.[calMonth] ?? 1));
       const bookingProb = Math.min(0.95, Math.max(0,
         cfg.baseDailyBookingProb * season * Math.pow(cfg.nightlyRateCents / cfg.referenceRateCents, -cfg.priceElasticity)));
 
       for (let d = 0; d < MONTH_DAYS[calMonth]; d++, day++) {
         if (nightsLeft === 0 && rng() < bookingProb) {
           nightsLeft = 1 + Math.floor(rng() * cfg.maxStayNights);
-          if (cfg.cleaningFeeCents > 0) biz.post({ day, memo: "Cleaning fee collected", flow: "operating",
-            lines: [{ account: "cash", debit: cfg.cleaningFeeCents }, { account: "cleaning_fee_revenue", credit: cfg.cleaningFeeCents }] });
+          if (cfg.cleaningFeeCents > 0) {
+            const fee = Math.round((cfg.cleaningFeeCents * cfg.platformFeePct) / 100);
+            biz.post({ day, memo: "Cleaning fee collected", flow: "operating", lines: [
+              { account: "cash", debit: cfg.cleaningFeeCents - fee },
+              { account: "platform_fees", debit: fee },
+              { account: "cleaning_fee_revenue", credit: cfg.cleaningFeeCents },
+            ] });
+          }
         }
         if (nightsLeft > 0) {
           // shortcut: cash arrives nightly; real platforms pay out after check-in. Fix when payout timing is modeled.
-          const gross = cfg.nightlyRateCents;
+          const gross = nightly;
           const fee = Math.round((gross * cfg.platformFeePct) / 100);
           biz.post({ day, memo: "Guest night", flow: "operating", lines: [
             { account: "cash", debit: gross - fee },
