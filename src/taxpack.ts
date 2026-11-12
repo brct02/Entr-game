@@ -1,8 +1,10 @@
 // Tax pack: the local tax facts for one US jurisdiction and one tax year.
 // A research agent fills one of these in; this file decides whether the engine will accept it.
-// Rule: the engine never guesses a tax. A value is either sourced, or it is marked unknown and anything that needs it stops.
+// Rule: the engine never guesses a tax. A value is sourced, or it is marked unknown and anything that needs it stops.
+// One exception: the game's owner may set a figure by hand. It is labeled "assumed", never presented as sourced,
+// and keeps the pack provisional until a real source replaces it. A research agent may not use this kind.
 
-export type TaxItemKind = "sourced" | "unknown";
+export type TaxItemKind = "sourced" | "unknown" | "assumed";
 export interface TaxItem {
   value: number | null;   // percent, or cents for money amounts; null when unknown
   kind: TaxItemKind;
@@ -41,11 +43,11 @@ export interface TaxPack {
   items: Record<TaxItemKey, TaxItem>;
 }
 
-export interface TaxPackCheck { ok: boolean; errors: string[]; unknown: TaxItemKey[]; unofficial: TaxItemKey[]; provisional: boolean; }
+export interface TaxPackCheck { ok: boolean; errors: string[]; unknown: TaxItemKey[]; unofficial: TaxItemKey[]; assumed: TaxItemKey[]; provisional: boolean; }
 
 export function validateTaxPack(pack: TaxPack, expectedTaxYear: number): TaxPackCheck {
   const errors: string[] = [];
-  const unknown: TaxItemKey[] = [], unofficial: TaxItemKey[] = [];
+  const unknown: TaxItemKey[] = [], unofficial: TaxItemKey[] = [], assumed: TaxItemKey[] = [];
   if (!/^[A-Z]{2}$/.test(pack.jurisdiction.state)) errors.push("state must be a two-letter code");
   if (!pack.jurisdiction.county) errors.push("county is required");
   if (pack.taxYear !== expectedTaxYear) errors.push(`pack is for tax year ${pack.taxYear}, game needs ${expectedTaxYear}`);
@@ -57,15 +59,21 @@ export function validateTaxPack(pack: TaxPack, expectedTaxYear: number): TaxPack
       if (item.value !== null) errors.push(`${key}: an unknown item cannot carry a value`);
       unknown.push(key); continue;
     }
-    if (item.kind !== "sourced") { errors.push(`${key}: kind must be sourced or unknown`); continue; }
+    if (item.kind !== "sourced" && item.kind !== "assumed") { errors.push(`${key}: kind must be sourced, unknown or assumed`); continue; }
     const [lo, hi] = TAX_ITEM_BOUNDS[key];
     if (typeof item.value !== "number" || !Number.isFinite(item.value) || item.value < lo || item.value > hi)
       errors.push(`${key}: value ${item.value} is outside the plausible range ${lo} to ${hi}`);
+    if (item.kind === "assumed") {
+      if (!item.note || !item.asOf) errors.push(`${key}: an assumed item must say who set it, when and why`);
+      if (item.official) errors.push(`${key}: an assumed item cannot be marked official`);
+      assumed.push(key); continue;
+    }
     if (!/^https:\/\//.test(item.source)) errors.push(`${key}: a sourced item needs an https source link`);
     if (!item.asOf) errors.push(`${key}: a sourced item needs an as-of date`);
     if (!item.official) unofficial.push(key);
   }
-  return { ok: errors.length === 0, errors, unknown, unofficial, provisional: !pack.reviewedByHuman || unofficial.length > 0 };
+  return { ok: errors.length === 0, errors, unknown, unofficial, assumed,
+    provisional: !pack.reviewedByHuman || unofficial.length > 0 || assumed.length > 0 };
 }
 
 /** The engine reads tax facts only through this. An invalid pack or an unknown item stops the game instead of guessing. */

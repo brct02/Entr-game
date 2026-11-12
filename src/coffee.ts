@@ -88,6 +88,7 @@ export interface CoffeeConfig {
   certificateOfUseCents: number; // paid once when the lease is signed
   countyBusinessTaxCentsPerYear: number; // paid at opening and every 12 months after
   certificateOfUseAnnualCents: number;   // yearly reinspection, from the first anniversary of opening
+  cityBusinessTaxCentsPerYear: number;   // paid at opening and every 12 months after
   repairsPctOfSales: number;     // paid monthly on the previous month's sales
   wastePct: number;              // remakes, comps and spills, as a share of tickets served
 }
@@ -240,6 +241,7 @@ export function runCoffee(cfg: CoffeeConfig): CoffeeResult {
 
         if (phase === "open" && (day - openDay) % 365 === 0) {
           pay(day, "licenses", "County business tax receipt", cfg.countyBusinessTaxCentsPerYear);
+          pay(day, "licenses", "City business tax receipt", cfg.cityBusinessTaxCentsPerYear);
           if (day > openDay) pay(day, "licenses", "Certificate of use reinspection", cfg.certificateOfUseAnnualCents);
         }
 

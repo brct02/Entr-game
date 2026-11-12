@@ -22,6 +22,10 @@ One JSON object matching `TaxPack` in `src/taxpack.ts`: state, county, optional 
 - An accepted pack is stored and reused for every player in that jurisdiction and tax year. It is not researched again per player.
 - A game keeps the tax year it started with.
 
+## Assumed figures
+
+The game's owner may set a figure by hand when research comes up empty. It is stored as `kind: "assumed"` with a note saying who set it, when and why. The player sees it labeled as an assumption, and the pack stays provisional until a real source replaces it. A research agent may never return an assumed figure.
+
 ## Not covered yet
 
 Property tax, federal and state income tax brackets, city-level gross receipts taxes, and industry-specific taxes. Add an item to `TAX_ITEM_BOUNDS` for each when the engine starts using it.
