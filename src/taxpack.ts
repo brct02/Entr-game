@@ -29,7 +29,9 @@ export const TAX_ITEM_BOUNDS = {
   minimumWageCentsPerHour: [7_25, 30_00],
   lodgingTaxTotalPct: [0, 25],
   countyBusinessTaxCentsPerYear: [0, 50_000_00],   // for a small eating establishment
-  cityBusinessTaxCentsPerYear: [0, 50_000_00],
+  cityBusinessTaxBaseCents: [0, 50_000_00],          // eating place, up to the seat threshold
+  cityBusinessTaxSeatThreshold: [0, 1000],
+  cityBusinessTaxPerExtraSeatCents: [0, 1_000_00],   // each seat above the threshold
   certificateOfUseInitialCents: [0, 50_000_00],    // for a small commercial unit
   certificateOfUseAnnualCents: [0, 50_000_00],
 } as const;
