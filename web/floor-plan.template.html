@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coffee Shop Floor Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a drafting sheet. Controls on the left, the drawn plan in the middle, what it does to the business on the right. */
+:root {
+  --paper: #eef1f4;
+  --sheet: #fbfcfd;
+  --ink: #17293d;
+  --ink-soft: #55677a;
+  --line: #c3ccd6;
+  --accent: #1f5fa8;
+  --zone-seat: #dfe9f5;
+  --zone-queue: #eef1f4;
+  --zone-bar: #cfdcec;
+  --zone-back: #d9dee4;
+  --good: #1d7a55;
+  --bad: #b3401f;
+  --bad-fill: #f7e3db;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #0d1826; --sheet: #132235; --ink: #e3ebf4; --ink-soft: #94a6ba; --line: #2f4460; --accent: #7fb2ee;
+    --zone-seat: #1b3250; --zone-queue: #132235; --zone-bar: #24405f; --zone-back: #1d2c3f;
+    --good: #5fc79b; --bad: #f08a66; --bad-fill: #3b2018;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0d1826; --sheet: #132235; --ink: #e3ebf4; --ink-soft: #94a6ba; --line: #2f4460; --accent: #7fb2ee;
+  --zone-seat: #1b3250; --zone-queue: #132235; --zone-bar: #24405f; --zone-back: #1d2c3f;
+  --good: #5fc79b; --bad: #f08a66; --bad-fill: #3b2018;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.45 var(--body); padding: 20px 16px 40px; }
+main { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px; }
+h1 { font: 600 30px/1.1 var(--display); letter-spacing: .02em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--ink-soft); max-width: 65ch; }
+h2 { font: 600 15px/1.2 var(--display); letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); margin: 0; }
+.grid { display: grid; grid-template-columns: 290px minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .grid { grid-template-columns: 290px minmax(0, 1fr); } .results { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--sheet); border: 1px solid var(--line); border-radius: 4px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { display: flex; justify-content: space-between; gap: 8px; font-weight: 500; }
+.field output, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.field small { color: var(--ink-soft); font-size: 12.5px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+select, button { font: inherit; color: var(--ink); background: var(--sheet); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; }
+select { width: 100%; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.left-over { display: flex; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; font-weight: 500; }
+.plan-wrap { overflow-x: auto; }
+svg { display: block; width: 100%; height: auto; min-width: 520px; }
+svg text { font-family: var(--display); fill: var(--ink); }
+svg .dim { font-family: var(--mono); font-size: 11px; fill: var(--ink-soft); }
+svg .zone-label { font-size: 15px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+svg .zone-area { font-family: var(--mono); font-size: 11.5px; fill: var(--ink-soft); }
+.status { display: inline-flex; align-items: center; gap: 8px; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border-radius: 3px; border: 1.5px solid currentColor; width: fit-content; }
+.status.ok { color: var(--good); }
+.status.no { color: var(--bad); background: var(--bad-fill); }
+ul.errors { margin: 0; padding-left: 18px; color: var(--bad); display: flex; flex-direction: column; gap: 4px; }
+dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+dt { color: var(--ink-soft); }
+dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+dd .delta { display: block; font-size: 12px; color: var(--ink-soft); }
+dd .delta.down { color: var(--bad); }
+dd .delta.up { color: var(--good); }
+.rule { border: 0; border-top: 1px solid var(--line); margin: 0; }
+.note { color: var(--ink-soft); font-size: 12.5px; margin: 0; max-width: 65ch; }
+.note a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Coffee shop floor plan</h1>
+    <p>Divide the unit, choose your seats, and see what the plan does to the business. Miami-Dade, 1,000 sq ft unit.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-label="Your layout">
+      <h2>Your layout</h2>
+      <div class="field">
+        <label for="loc">Location</label>
+        <select id="loc"></select>
+      </div>
+      <div class="field">
+        <label for="bar">Service bar <output id="bar-out"></output></label>
+        <input type="range" id="bar" min="50" max="500" step="10">
+        <small id="bar-note"></small>
+      </div>
+      <div class="field">
+        <label for="boh">Back of house <output id="boh-out"></output></label>
+        <input type="range" id="boh" min="50" max="600" step="10">
+        <small>Storage, prep, dishwashing. At least 15% of the unit.</small>
+      </div>
+      <div class="field">
+        <label for="rest">Restroom <output id="rest-out"></output></label>
+        <input type="range" id="rest" min="0" max="150" step="10">
+        <small>Required once the shop has seats.</small>
+      </div>
+      <div class="field">
+        <label for="queue">Queue and entry <output id="queue-out"></output></label>
+        <input type="range" id="queue" min="0" max="300" step="10">
+      </div>
+      <div class="left-over"><span>Left for seating</span><span class="num" id="seating-out"></span></div>
+      <div class="field">
+        <label for="tables">Table seats <output id="tables-out"></output></label>
+        <input type="range" id="tables" min="0" max="60" step="2">
+        <small>15 sq ft each, drawn as tables for two.</small>
+      </div>
+      <div class="field">
+        <label for="counter">Counter seats <output id="counter-out"></output></label>
+        <input type="range" id="counter" min="0" max="30" step="1">
+        <small>9 sq ft each, stools along the window.</small>
+      </div>
+      <div class="presets" role="group" aria-label="Starting points">
+        <button type="button" data-preset="standard">Standard</button>
+        <button type="button" data-preset="takeaway">Takeaway only</button>
+        <button type="button" data-preset="lounge">Most seats</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Drawn plan">
+      <h2>Plan</h2>
+      <div class="plan-wrap"><svg id="plan" viewBox="0 0 560 360" role="img" aria-label="Floor plan drawn from your layout"></svg></div>
+      <p class="note">Drawn to scale from your numbers: 40 ft wide, 25 ft deep, street on the left. You choose the areas and the seat counts; the plan arranges them.</p>
+    </section>
+
+    <section class="panel results" aria-label="What it does" aria-live="polite">
+      <h2>What it does</h2>
+      <div id="status" class="status ok"></div>
+      <ul id="errors" class="errors" hidden></ul>
+      <dl>
+        <dt>Seats</dt><dd id="r-seats"></dd>
+        <dt>Seating floor used</dt><dd id="r-used"></dd>
+        <dt>Staff the bar can hold</dt><dd id="r-stations"></dd>
+        <dt>City business tax, a year</dt><dd id="r-city"></dd>
+        <dt>County business tax, a year</dt><dd id="r-county"></dd>
+      </dl>
+      <hr class="rule">
+      <h2>Established shop, one year</h2>
+      <dl>
+        <dt>Sales</dt><dd id="r-rev"></dd>
+        <dt>Customers a day</dt><dd id="r-cust"></dd>
+        <dt>Customers lost</dt><dd id="r-lost"></dd>
+        <dt>Profit before owner pay</dt><dd id="r-profit"></dd>
+      </dl>
+      <p class="note" id="sim-note">Year three of a shop with enough money to get there, compared with the standard layout in the same location.</p>
+    </section>
+  </div>
+
+  <p class="note">The fit rules and the taxes are sourced: seat sizes from published cafe layout guides and the building code's 15 sq ft per person for tables and chairs; City of Miami business tax from City Code sec. 31-50; county tax from the Tax Collector's schedule. How customers react to seating is estimated: 40% want a seat, a seat serves 2.5 people per four-hour block, half of those who find no seat leave, and 45% of a block's customers arrive in its busiest hour. Customer counts per location are estimates too. This page runs the same engine as the game, from <a href="https://github.com/brct02/Entr-game">brct02/Entr-game</a>.</p>
+</main>
+
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+(() => {
+  "use strict";
+  const E = ENGINE, BASE = E.MIAMI_COFFEE, RULES = BASE.layoutRules, LOCS = E.MIAMI_COFFEE_LOCATIONS;
+  const $ = id => document.getElementById(id);
+  const money = c => (c < 0 ? "-" : "") + "$" + Math.round(Math.abs(c) / 100).toLocaleString("en-US");
+  const PRESETS = {
+    standard: { ...BASE.layout },
+    takeaway: { serviceBarSqFt: 300, backOfHouseSqFt: 300, restroomSqFt: 0, queueSqFt: 300, tableSeats: 0, counterSeats: 0 },
+    lounge: { serviceBarSqFt: 150, backOfHouseSqFt: 150, restroomSqFt: 60, queueSqFt: 60, tableSeats: 34, counterSeats: 7 },
+  };
+  const FIELDS = { bar: "serviceBarSqFt", boh: "backOfHouseSqFt", rest: "restroomSqFt", queue: "queueSqFt", tables: "tableSeats", counter: "counterSeats" };
+  let layout = { ...PRESETS.standard }, locKey = "average";
+
+  for (const [key, loc] of Object.entries(LOCS)) {
+    const o = document.createElement("option");
+    o.value = key;
+    o.textContent = `${loc.name} ($${(loc.rentPerSqFtYearCents / 100).toFixed(2)} a sq ft)`;
+    $("loc").append(o);
+  }
+  $("loc").value = locKey;
+
+  // The year-three numbers for a layout, from the real simulation. Cached, since sliders fire often.
+  const cache = new Map();
+  function yearThree(lay, key) {
+    const id = key + JSON.stringify(lay);
+    if (!cache.has(id)) {
+      const r = E.runCoffee({ ...BASE, location: LOCS[key], layout: lay, loan: undefined, personalCashCents: 900_000_00, contributionCents: 600_000_00 });
+      const y = r.months.slice(-12), sum = f => y.reduce((s, m) => s + f(m), 0);
+      cache.set(id, { rev: sum(m => m.revenueCents), profit: sum(m => m.netIncomeCents), lost: sum(m => m.walkouts), cust: sum(m => m.customersPerDay) / 12 });
+    }
+    return cache.get(id);
+  }
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs, text) => {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+
+  function draw(check) {
+    const svg = $("plan");
+    svg.replaceChildren();
+    const sqFt = LOCS[locKey].sqFt, DEPTH = 25, WIDTH = sqFt / DEPTH; // feet
+    const S = 12, X0 = 40, Y0 = 36;                                   // 12 px to the foot
+    const px = ft => ft * S;
+    const over = check.seatingSqFt < 0;
+    const cs = getComputedStyle(document.documentElement);
+    const v = name => cs.getPropertyValue(name).trim();
+    const ink = v("--ink"), soft = v("--ink-soft"), bad = v("--bad");
+
+    // Bands from the street (left) to the back (right): seating, queue, bar, then back of house with the restroom in its corner.
+    const total = Math.max(sqFt, layout.serviceBarSqFt + layout.backOfHouseSqFt + layout.restroomSqFt + layout.queueSqFt);
+    const fit = WIDTH / (total / DEPTH); // squeeze only when the areas exceed the unit
+    const seatW = Math.max(0, check.seatingSqFt) / DEPTH * fit, queueW = layout.queueSqFt / DEPTH * fit;
+    const barW = layout.serviceBarSqFt / DEPTH * fit, backW = (layout.backOfHouseSqFt + layout.restroomSqFt) / DEPTH * fit;
+    let x = X0;
+    const band = (w, fill, label, area) => {
+      if (w <= 0) return null;
+      const g = { x, w: px(w) };
+      svg.append(el("rect", { x, y: Y0, width: px(w), height: px(DEPTH), fill, stroke: ink, "stroke-width": 1 }));
+      if (px(w) > 54) {
+        svg.append(el("text", { x: x + px(w) / 2, y: Y0 + px(DEPTH) - 22, "text-anchor": "middle", class: "zone-label" }, label));
+        svg.append(el("text", { x: x + px(w) / 2, y: Y0 + px(DEPTH) - 8, "text-anchor": "middle", class: "zone-area" }, area + " sq ft"));
+      } else if (px(w) > 16) { // a narrow band gets its label turned on its side
+        const cx = x + px(w) / 2 + 4, cy = Y0 + px(DEPTH) / 2;
+        svg.append(el("text", { x: cx, y: cy, "text-anchor": "middle", class: "zone-area", transform: `rotate(-90 ${cx} ${cy})` }, `${label.toUpperCase()} ${area} sq ft`));
+      }
+      x += px(w);
+      return g;
+    };
+    const seat = band(seatW, v("--zone-seat"), "Seating", Math.max(0, check.seatingSqFt));
+    band(queueW, v("--zone-queue"), "Queue", layout.queueSqFt);
+    const bar = band(barW, v("--zone-bar"), "Bar", layout.serviceBarSqFt);
+    const back = band(backW, v("--zone-back"), "Back", layout.backOfHouseSqFt);
+    if (back && layout.restroomSqFt > 0) {
+      const h = px(layout.restroomSqFt / (backW * DEPTH) * DEPTH);
+      svg.append(el("rect", { x: back.x, y: Y0, width: back.w, height: h, fill: v("--sheet"), stroke: ink, "stroke-width": 1 }));
+      if (back.w > 40 && h > 16) svg.append(el("text", { x: back.x + back.w / 2, y: Y0 + h / 2 + 4, "text-anchor": "middle", class: "zone-area" }, "WC " + layout.restroomSqFt));
+    }
+
+    // Bar: one work station per 50 sq ft, drawn along the counter facing the queue.
+    if (bar) {
+      const n = check.barStations, gap = px(DEPTH) / (n + 1);
+      svg.append(el("line", { x1: bar.x + 6, y1: Y0 + 8, x2: bar.x + 6, y2: Y0 + px(DEPTH) - 40, stroke: ink, "stroke-width": 4 }));
+      for (let i = 1; i <= n; i++) {
+        const cy = Y0 + gap * i * 0.82;
+        if (bar.w > 30) svg.append(el("circle", { cx: bar.x + Math.min(bar.w - 10, 26), cy, r: 6, fill: "none", stroke: ink, "stroke-width": 1.5 }));
+      }
+    }
+
+    // Seating: stools along the window, then tables for two in a grid. Whatever does not fit is flagged, not hidden.
+    if (seat) {
+      const colour = check.seatingUsedSqFt > check.seatingSqFt ? bad : ink;
+      const stoolStrip = layout.counterSeats > 0 ? px(3) : 0;
+      const stoolsFit = Math.max(0, Math.floor((px(DEPTH) - 50) / px(2)));
+      const stools = Math.min(layout.counterSeats, stoolsFit);
+      for (let i = 0; i < stools; i++) svg.append(el("circle", { cx: seat.x + 12, cy: Y0 + 14 + i * px(2), r: 5, fill: "none", stroke: colour, "stroke-width": 1.5 }));
+      // Tables for two, packed as tightly as they can be drawn without touching (52 by 30 px each at the least).
+      const tables = Math.ceil(layout.tableSeats / 2), top = Y0 + 8, usableH = px(DEPTH) - 50, cellW = 52;
+      const cols = Math.max(0, Math.floor((seat.w - stoolStrip - 6) / cellW));
+      const rowsNeeded = cols ? Math.ceil(tables / cols) : 0, maxRows = Math.floor(usableH / 30);
+      const rows = Math.min(rowsNeeded, maxRows), cellH = rows ? Math.min(72, usableH / rows) : 0;
+      const shown = Math.min(tables, cols * rows);
+      for (let i = 0; i < shown; i++) {
+        const cx = seat.x + stoolStrip + 6 + (i % cols) * cellW + cellW / 2, cy = top + Math.floor(i / cols) * cellH + cellH / 2;
+        svg.append(el("rect", { x: cx - 11, y: cy - 11, width: 22, height: 22, fill: v("--sheet"), stroke: colour, "stroke-width": 1.5 }));
+        svg.append(el("circle", { cx: cx - 19, cy, r: 5, fill: "none", stroke: colour, "stroke-width": 1.5 }));
+        if (i * 2 + 1 < layout.tableSeats) svg.append(el("circle", { cx: cx + 19, cy, r: 5, fill: "none", stroke: colour, "stroke-width": 1.5 }));
+      }
+      const hidden = (tables - shown) * 2 + (layout.counterSeats - stools);
+      const tooMany = check.seatingUsedSqFt > check.seatingSqFt;
+      if (hidden > 0 && seat.w > 54) svg.append(el("text", { x: seat.x + seat.w / 2, y: Y0 + px(DEPTH) - 36, "text-anchor": "middle", class: "zone-area", style: tooMany ? `fill:${bad}` : "" },
+        tooMany ? `${hidden} more seats do not fit` : `+${hidden} seats not drawn`));
+    }
+
+    // Outline, door, dimensions, scale bar.
+    svg.append(el("rect", { x: X0, y: Y0, width: px(WIDTH), height: px(DEPTH), fill: "none", stroke: over ? bad : ink, "stroke-width": 3 }));
+    svg.append(el("line", { x1: X0, y1: Y0 + px(DEPTH) - 44, x2: X0, y2: Y0 + px(DEPTH) - 8, stroke: v("--sheet"), "stroke-width": 4 }));
+    svg.append(el("text", { x: X0 - 12, y: Y0 + px(DEPTH) / 2, "text-anchor": "middle", class: "dim", transform: `rotate(-90 ${X0 - 12} ${Y0 + px(DEPTH) / 2})` }, "STREET  ·  25 ft"));
+    svg.append(el("line", { x1: X0, y1: Y0 - 12, x2: X0 + px(WIDTH), y2: Y0 - 12, stroke: soft, "stroke-width": 1 }));
+    for (const tx of [X0, X0 + px(WIDTH)]) svg.append(el("line", { x1: tx, y1: Y0 - 17, x2: tx, y2: Y0 - 7, stroke: soft, "stroke-width": 1 }));
+    svg.append(el("text", { x: X0 + px(WIDTH) / 2, y: Y0 - 18, "text-anchor": "middle", class: "dim" }, `${WIDTH} ft`));
+    const sy = Y0 + px(DEPTH) + 18;
+    svg.append(el("line", { x1: X0, y1: sy, x2: X0 + px(10), y2: sy, stroke: ink, "stroke-width": 2 }));
+    svg.append(el("text", { x: X0 + px(10) + 8, y: sy + 4, class: "dim" }, "10 ft"));
+    if (over) svg.append(el("text", { x: X0 + px(WIDTH), y: sy + 4, "text-anchor": "end", class: "dim", style: `fill:${bad}` }, "areas exceed the unit; plan squeezed to fit"));
+  }
+
+  function setDelta(dd, value, base, fmt, goodWhenUp) {
+    dd.textContent = fmt(value);
+    const d = value - base;
+    if (Math.abs(d) < 1) return;
+    const s = document.createElement("span");
+    s.className = "delta " + ((d > 0) === goodWhenUp ? "up" : "down");
+    s.textContent = (d > 0 ? "+" : "-") + fmt(Math.abs(d)).replace("-", "") + " vs standard";
+    dd.append(s);
+  }
+
+  let timer = 0;
+  function render() {
+    for (const [id, key] of Object.entries(FIELDS)) {
+      $(id).value = layout[key];
+      $(id + "-out").textContent = layout[key] + (id === "tables" || id === "counter" ? "" : " sq ft");
+    }
+    const sqFt = LOCS[locKey].sqFt;
+    const check = E.checkCoffeeLayout(sqFt, layout, RULES);
+    const tax = E.businessTaxForSeats(check.seats, BASE.businessTax);
+    $("seating-out").textContent = check.seatingSqFt + " sq ft";
+    $("seating-out").style.color = check.seatingSqFt < 0 ? "var(--bad)" : "";
+    $("bar-note").textContent = `Room for ${check.barStations} ${check.barStations === 1 ? "person" : "people"} to work at once (50 sq ft each).`;
+    $("status").className = "status " + (check.ok ? "ok" : "no");
+    $("status").textContent = check.ok ? "Can be built" : "Cannot be built";
+    $("errors").hidden = check.ok;
+    $("errors").replaceChildren(...check.errors.map(e => { const li = document.createElement("li"); li.textContent = e.charAt(0).toUpperCase() + e.slice(1) + "."; return li; }));
+    $("r-seats").textContent = check.seats;
+    $("r-used").textContent = `${check.seatingUsedSqFt} of ${Math.max(0, check.seatingSqFt)} sq ft`;
+    $("r-stations").textContent = check.barStations;
+    $("r-city").textContent = money(tax.cityCents);
+    $("r-county").textContent = money(tax.countyCents);
+    draw(check);
+
+    clearTimeout(timer);
+    const sims = ["r-rev", "r-cust", "r-lost", "r-profit"];
+    if (!check.ok) { for (const id of sims) $(id).textContent = "n/a"; $("sim-note").textContent = "Fix the plan to see how the shop would trade."; return; }
+    $("sim-note").textContent = "Year three of a shop with enough money to get there, compared with the standard layout in the same location.";
+    timer = setTimeout(() => {
+      const now = yearThree({ ...layout }, locKey), std = yearThree(PRESETS.standard, locKey);
+      setDelta($("r-rev"), now.rev, std.rev, money, true);
+      setDelta($("r-cust"), Math.round(now.cust), Math.round(std.cust), n => String(Math.round(n)), true);
+      setDelta($("r-lost"), now.lost, std.lost, n => Math.round(n).toLocaleString("en-US"), false);
+      setDelta($("r-profit"), now.profit, std.profit, money, true);
+    }, 120);
+  }
+
+  for (const [id, key] of Object.entries(FIELDS)) $(id).addEventListener("input", e => { layout[key] = Number(e.target.value); render(); });
+  $("loc").addEventListener("change", e => { locKey = e.target.value; render(); });
+  for (const b of document.querySelectorAll("[data-preset]")) b.addEventListener("click", () => { layout = { ...PRESETS[b.dataset.preset] }; render(); });
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (mq.addEventListener) mq.addEventListener("change", render);
+  new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  render();
+})();
+</script>
+</body>
+</html>
